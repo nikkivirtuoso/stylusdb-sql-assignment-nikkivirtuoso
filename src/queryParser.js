@@ -4,14 +4,12 @@ function parseQuery(query) {
     let selectPart, fromPart;
 
     const whereSplit = query.split(/\sWHERE\s/i);
-    query = whereSplit[0];
-
+    queryWithoutWhere = whereSplit[0]; //everything before where clause
     const whereClause = whereSplit.length > 1 ? whereSplit[1].trim() : null;
 
-    const joinSplit = query.split(/\sINNER JOIN\s/i);
-    selectPart = joinSplit[0].trim(); 
-
-    const joinPart = joinSplit.length > 1 ? joinSplit[1].trim() : null;
+    const joinSplit = queryWithoutWhere.split(/\s(INNER|LEFT|RIGHT) JOIN\s/i);
+    selectPart = joinSplit[0].trim(); // Adjusted to properly handle JOIN types
+    const { joinType, joinTable, joinCondition } = parseJoinClause(queryWithoutWhere);
 
     const selectRegex = /^SELECT\s(.+?)\sFROM\s(.+)/i;
     const selectMatch = selectPart.match(selectRegex);
@@ -20,21 +18,6 @@ function parseQuery(query) {
     }
 
     const [, fields, table] = selectMatch;
-
-    let joinTable = null, joinCondition = null;
-    if (joinPart) {
-        const joinRegex = /^(.+?)\sON\s([\w.]+)\s*=\s*([\w.]+)/i;
-        const joinMatch = joinPart.match(joinRegex);
-        if (!joinMatch) {
-            throw new Error('Invalid JOIN format');
-        }
-
-        joinTable = joinMatch[1].trim();
-        joinCondition = {
-            left: joinMatch[2].trim(),
-            right: joinMatch[3].trim()
-        };
-    }
 
     let whereClauses = [];
     if (whereClause) {
@@ -45,10 +28,12 @@ function parseQuery(query) {
         fields: fields.split(',').map(field => field.trim()),
         table: table.trim(),
         whereClauses,
+        joinType,
         joinTable,
         joinCondition
     };
 }
+
 
 function parseWhereClause(whereString) {
     const conditionRegex = /(.*?)(=|!=|>|<|>=|<=)(.*)/;
@@ -62,4 +47,26 @@ function parseWhereClause(whereString) {
     });
 }
 
-module.exports = parseQuery;
+function parseJoinClause(query) {
+    const joinRegex = /\s(INNER|LEFT|RIGHT) JOIN\s(.+?)\sON\s([\w.]+)\s*=\s*([\w.]+)/i;
+    const joinMatch = query.match(joinRegex);
+
+    if (joinMatch) {
+        return {
+            joinType: joinMatch[1].trim(),
+            joinTable: joinMatch[2].trim(),
+            joinCondition: {
+                left: joinMatch[3].trim(),
+                right: joinMatch[4].trim()
+            }
+        };
+    }
+
+    return {
+        joinType: null,
+        joinTable: null,
+        joinCondition: null
+    };
+}
+
+module.exports = { parseQuery, parseJoinClause };
